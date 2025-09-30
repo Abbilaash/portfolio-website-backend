@@ -1,13 +1,10 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+import requests
 import os
 from datetime import datetime
 import logging
 import dotenv
-from email_template import get_email_template
 
 dotenv.load_dotenv()  # Load environment variables from .env file
 
@@ -18,91 +15,96 @@ CORS(app)  # Enable CORS for all routes
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Email configuration
-EMAIL_CONFIG = {
-    'smtp_server': 'smtp.gmail.com',
-    'smtp_port': 465,  # SSL port
-    'sender_email': os.getenv('SMTP_MAIL_ID'),  # Updated to match your env variable
-    'sender_password': os.getenv('SMTP_MAIL_PASSWORD'),  # Updated to match your env variable
-    'recipient_email': os.getenv('RECIPIENT_EMAIL')
+sample = 'https://script.google.com/macros/s/AKfycbxaF3MGuR3ib227qvjpR0H3ieuPzf4nM9vFWHvG_0_zBHNV2FBnJjyCYhWrjAbZ1IrKiw/exec'
+
+# Google Sheets configuration
+GOOGLE_SHEET_CONFIG = {
+    'web_app_url': os.getenv('GOOGLE_SHEET_WEB_APP_URL')  # Google Apps Script URL
 }
 
-def send_email(name, email, message):
+def add_to_google_sheet(name, email, message):
     """
-    Send email using SMTP SSL with HTML template
+    Add contact form data to Google Sheet using Google Apps Script
     """
     try:
-        # Debug: Check email configuration
-        logger.info("=== EMAIL CONFIGURATION DEBUG ===")
-        logger.info(f"SMTP Server: {EMAIL_CONFIG['smtp_server']}")
-        logger.info(f"SMTP Port: {EMAIL_CONFIG['smtp_port']}")
-        logger.info(f"Sender Email: {EMAIL_CONFIG['sender_email']}")
-        logger.info(f"Recipient Email: {EMAIL_CONFIG['recipient_email']}")
-        logger.info(f"Password Set: {'Yes' if EMAIL_CONFIG['sender_password'] else 'No'}")
+        # Debug: Check Google Sheets configuration
+        logger.info("=== GOOGLE SHEETS CONFIGURATION DEBUG ===")
+        logger.info(f"Web App URL Set: {'Yes' if GOOGLE_SHEET_CONFIG['web_app_url'] else 'No'}")
+        logger.info(f"Web App URL: {GOOGLE_SHEET_CONFIG['web_app_url']}")
         
-        # Validate email configuration
-        if not EMAIL_CONFIG['sender_email']:
-            logger.error("SMTP_MAIL_ID (sender email) not set in environment variables")
+        # Validate configuration
+        if not GOOGLE_SHEET_CONFIG['web_app_url']:
+            logger.error("GOOGLE_SHEET_WEB_APP_URL not set in environment variables")
             return False
         
-        if not EMAIL_CONFIG['sender_password']:
-            logger.error("SMTP_MAIL_PASSWORD not set in environment variables")
+        if 'YOUR_SCRIPT_ID' in GOOGLE_SHEET_CONFIG['web_app_url']:
+            logger.error("GOOGLE_SHEET_WEB_APP_URL still contains placeholder. Please update with actual web app URL.")
             return False
         
-        if not EMAIL_CONFIG['recipient_email']:
-            logger.error("RECIPIENT_EMAIL not set in environment variables")
+        logger.info("Starting Google Sheets data submission process...")
+        
+        # Prepare the data to send to Google Apps Script
+        payload = {
+            'name': name,
+            'email': email,
+            'message': message,
+            'timestamp': datetime.now().isoformat()
+        }
+        
+        logger.info(f"Payload: {payload}")
+        logger.info("Attempting to send data to Google Apps Script...")
+        
+        # Send the data to the Google Apps Script
+        response = requests.post(GOOGLE_SHEET_CONFIG['web_app_url'], json=payload, timeout=30)
+        
+        logger.info(f"Google Apps Script response status code: {response.status_code}")
+        logger.info(f"Google Apps Script response text: {response.text}")
+        
+        # Try to parse the JSON response for more details
+        try:
+            response_data = response.json()
+            logger.info(f"Parsed response data: {response_data}")
+            if 'data' in response_data:
+                logger.info(f"Response includes data: {response_data['data']}")
+        except Exception as json_error:
+            logger.warning(f"Could not parse response as JSON: {json_error}")
+        
+        # Check if the request was successful
+        if response.status_code == 200:
+            logger.info(f"Data added to Google Sheet successfully from {email}")
+            return True
+        elif response.status_code == 401:
+            logger.error("Unauthorized access to Google Apps Script. This usually means:")
+            logger.error("1. The web app URL is incorrect")
+            logger.error("2. The Google Apps Script is not deployed as a web app")
+            logger.error("3. The web app permissions are set incorrectly")
+            logger.error("4. The script ID in the URL doesn't exist")
+            return False
+        elif response.status_code == 404:
+            logger.error("Google Apps Script web app not found. Check if the URL is correct and the script is deployed.")
+            return False
+        elif response.status_code == 403:
+            logger.error("Access denied to Google Apps Script. Check deployment permissions.")
+            return False
+        elif response.status_code == 500:
+            logger.error("Google Apps Script internal error. Check the script for errors.")
+            return False
+        else:
+            logger.error(f"Failed to add data to Google Sheet. Status code: {response.status_code}")
+            logger.error(f"Response: {response.text[:500]}...")  # Truncate long responses
             return False
         
-        logger.info("Starting email sending process...")
-        
-        # Create message container
-        msg = MIMEMultipart()
-        msg['Subject'] = f"Portfolio Contact Form - Message from {name}"
-        msg['From'] = EMAIL_CONFIG['sender_email']
-        msg['To'] = EMAIL_CONFIG['recipient_email']
-        
-        # Get HTML email template
-        html_content = get_email_template(name, email, message)
-        msg.attach(MIMEText(html_content, 'html'))
-        
-        logger.info("Attempting to connect to Gmail SMTP SSL server...")
-        
-        # Send email using SSL connection (like your sample)
-        server = smtplib.SMTP_SSL(EMAIL_CONFIG['smtp_server'], EMAIL_CONFIG['smtp_port'])
-        logger.info("Connected to SMTP SSL server successfully")
-        
-        logger.info("Attempting to login...")
-        server.login(EMAIL_CONFIG['sender_email'], EMAIL_CONFIG['sender_password'])
-        logger.info("Login successful")
-        
-        logger.info("Sending email...")
-        server.sendmail(EMAIL_CONFIG['sender_email'], EMAIL_CONFIG['recipient_email'], msg.as_string())
-        logger.info("Email sent successfully")
-        
-        server.quit()
-        logger.info(f"Email sent successfully from {email}")
-        return True
-        
-    except smtplib.SMTPAuthenticationError as e:
-        logger.error(f"SMTP Authentication Error: {str(e)}")
-        logger.error("This usually means:")
-        logger.error("1. Incorrect email or password")
-        logger.error("2. 2-Factor Authentication is enabled but App Password not used")
-        logger.error("3. 'Less secure app access' is disabled (for older Gmail accounts)")
+    except requests.exceptions.Timeout as e:
+        logger.error(f"Timeout error when connecting to Google Apps Script: {str(e)}")
         return False
-    except smtplib.SMTPException as e:
-        logger.error(f"SMTP Error: {str(e)}")
+    except requests.exceptions.ConnectionError as e:
+        logger.error(f"Connection error when connecting to Google Apps Script: {str(e)}")
         return False
-    except ConnectionRefusedError as e:
-        logger.error(f"Connection Refused Error: {str(e)}")
-        logger.error("This usually means:")
-        logger.error("1. Firewall is blocking the connection")
-        logger.error("2. Antivirus software is blocking SMTP")
-        logger.error("3. ISP is blocking port 465")
-        logger.error("4. Network connectivity issues")
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Request error when connecting to Google Apps Script: {str(e)}")
         return False
     except Exception as e:
-        logger.error(f"Failed to send email: {str(e)}")
+        logger.error(f"Failed to add data to Google Sheet: {str(e)}")
         logger.error(f"Error type: {type(e).__name__}")
         return False
 
@@ -137,16 +139,16 @@ def contact():
                 'message': 'Please provide a valid email address'
             }), 400
         
-        # Send email
-        if send_email(name, email, message):
+        # Add data to Google Sheet
+        if add_to_google_sheet(name, email, message):
             return jsonify({
                 'success': True,
-                'message': 'Message sent successfully! I\'ll get back to you soon.'
+                'message': 'Message submitted successfully! Your data has been recorded.'
             }), 200
         else:
             return jsonify({
                 'success': False,
-                'message': 'Failed to send message. Please try again or contact me directly.'
+                'message': 'Failed to submit message. Please try again or contact me directly.'
             }), 500
             
     except Exception as e:
@@ -163,31 +165,83 @@ def health():
         'timestamp': datetime.now().isoformat()
     }), 200
 
-@app.route('/api/email-config-check', methods=['GET'])
-def email_config_check():
+@app.route('/api/test-sheet-debug', methods=['GET'])
+def test_sheet_debug():
     """
-    Check email configuration status
+    Test Google Sheets connection with detailed debugging
+    """
+    try:
+        # Prepare test data
+        payload = {
+            'name': 'Debug Test User',
+            'email': 'debug@test.com',
+            'message': 'This is a debug test message',
+            'timestamp': datetime.now().isoformat()
+        }
+        
+        # Send request
+        response = requests.post(GOOGLE_SHEET_CONFIG['web_app_url'], json=payload, timeout=30)
+        
+        # Parse response
+        try:
+            response_data = response.json()
+        except:
+            response_data = {"error": "Could not parse JSON", "raw_text": response.text}
+        
+        return jsonify({
+            'success': response.status_code == 200,
+            'status_code': response.status_code,
+            'response_data': response_data,
+            'payload_sent': payload,
+            'url_used': GOOGLE_SHEET_CONFIG['web_app_url']
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'error_type': type(e).__name__
+        }), 500
+
+@app.route('/api/test-sheet', methods=['GET'])
+def test_sheet():
+    """
+    Test Google Sheets connection
+    """
+    try:
+        result = add_to_google_sheet("Test User", "test@example.com", "This is a test message")
+        if result:
+            return jsonify({
+                'success': True,
+                'message': 'Google Sheets connection successful!'
+            }), 200
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'Google Sheets connection failed. Check logs for details.'
+            }), 500
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error testing Google Sheets: {str(e)}'
+        }), 500
+
+@app.route('/api/config-check', methods=['GET'])
+def config_check():
+    """
+    Check Google Sheets configuration status
     """
     config_status = {
-        'smtp_server': EMAIL_CONFIG['smtp_server'],
-        'smtp_port': EMAIL_CONFIG['smtp_port'],
-        'sender_email_set': bool(EMAIL_CONFIG['sender_email']),
-        'sender_password_set': bool(EMAIL_CONFIG['sender_password']),
-        'recipient_email_set': bool(EMAIL_CONFIG['recipient_email']),
-        'sender_email': EMAIL_CONFIG['sender_email'] if EMAIL_CONFIG['sender_email'] else 'Not set',
-        'recipient_email': EMAIL_CONFIG['recipient_email'] if EMAIL_CONFIG['recipient_email'] else 'Not set'
+        'google_sheet_url_set': bool(GOOGLE_SHEET_CONFIG['web_app_url']),
+        'web_app_url': GOOGLE_SHEET_CONFIG['web_app_url'] if GOOGLE_SHEET_CONFIG['web_app_url'] else 'Not set'
     }
     
-    all_configured = all([
-        EMAIL_CONFIG['sender_email'],
-        EMAIL_CONFIG['sender_password'],
-        EMAIL_CONFIG['recipient_email']
-    ])
+    all_configured = bool(GOOGLE_SHEET_CONFIG['web_app_url'])
     
     return jsonify({
         'configured': all_configured,
         'config': config_status,
-        'message': 'Email configuration is complete' if all_configured else 'Email configuration incomplete'
+        'message': 'Google Sheets configuration is complete' if all_configured else 'Google Sheets configuration incomplete'
     }), 200
 
 @app.route('/', methods=['GET'])
@@ -196,28 +250,21 @@ def home():
     Root endpoint
     """
     return jsonify({
-        'message': 'Portfolio Backend API',
-        'version': '1.0.0',
+        'message': 'Portfolio Backend API - Google Sheets Integration',
+        'version': '2.0.0',
         'endpoints': {
             'contact': '/api/contact (POST)',
-            'health': '/api/health (GET)'
+            'health': '/api/health (GET)',
+            'config-check': '/api/config-check (GET)',
+            'test-sheet': '/api/test-sheet (GET)',
+            'test-sheet-debug': '/api/test-sheet-debug (GET)'
         }
     }), 200
 
 if __name__ == '__main__':
-    # Check for environment variables (keeping both old and new variable names for compatibility)
-    if 'SMTP_MAIL_ID' in os.environ:
-        EMAIL_CONFIG['sender_email'] = os.environ['SMTP_MAIL_ID']
-    elif 'SENDER_EMAIL' in os.environ:
-        EMAIL_CONFIG['sender_email'] = os.environ['SENDER_EMAIL']
-    
-    if 'SMTP_MAIL_PASSWORD' in os.environ:
-        EMAIL_CONFIG['sender_password'] = os.environ['SMTP_MAIL_PASSWORD']
-    elif 'SENDER_PASSWORD' in os.environ:
-        EMAIL_CONFIG['sender_password'] = os.environ['SENDER_PASSWORD']
-    
-    if 'RECIPIENT_EMAIL' in os.environ:
-        EMAIL_CONFIG['recipient_email'] = os.environ['RECIPIENT_EMAIL']
+    # Check for environment variables
+    if 'GOOGLE_SHEET_WEB_APP_URL' in os.environ:
+        GOOGLE_SHEET_CONFIG['web_app_url'] = os.environ['GOOGLE_SHEET_WEB_APP_URL']
     
     # Run the app
     app.run(debug=True, host='0.0.0.0', port=5000)

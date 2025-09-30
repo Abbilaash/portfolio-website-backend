@@ -8,9 +8,7 @@ services:
     environment:
       - FLASK_ENV=production
       - FLASK_DEBUG=false
-      - SMTP_MAIL_ID=${SMTP_MAIL_ID}
-      - SMTP_MAIL_PASSWORD=${SMTP_MAIL_PASSWORD}
-      - RECIPIENT_EMAIL=${RECIPIENT_EMAIL}
+      - GOOGLE_SHEET_WEB_APP_URL=${GOOGLE_SHEET_WEB_APP_URL}
     env_file:
       - .env
     restart: unless-stopped
