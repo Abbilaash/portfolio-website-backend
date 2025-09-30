@@ -14,9 +14,6 @@ CORS(app)  # Enable CORS for all routes
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-sample = 'https://script.google.com/macros/s/AKfycbxaF3MGuR3ib227qvjpR0H3ieuPzf4nM9vFWHvG_0_zBHNV2FBnJjyCYhWrjAbZ1IrKiw/exec'
-
 # Google Sheets configuration
 GOOGLE_SHEET_CONFIG = {
     'web_app_url': os.getenv('GOOGLE_SHEET_WEB_APP_URL')  # Google Apps Script URL
