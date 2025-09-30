@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 # Email configuration
 EMAIL_CONFIG = {
     'smtp_server': 'smtp.gmail.com',
-    'smtp_port': 587,
+    'smtp_port': 465,  # SSL port
     'sender_email': os.getenv('SMTP_MAIL_ID'),  # Updated to match your env variable
     'sender_password': os.getenv('SMTP_MAIL_PASSWORD'),  # Updated to match your env variable
     'recipient_email': os.getenv('RECIPIENT_EMAIL')
@@ -29,7 +29,7 @@ EMAIL_CONFIG = {
 
 def send_email(name, email, message):
     """
-    Send email using SMTP with HTML template
+    Send email using SMTP SSL with HTML template
     """
     try:
         # Debug: Check email configuration
@@ -56,34 +56,30 @@ def send_email(name, email, message):
         logger.info("Starting email sending process...")
         
         # Create message container
-        msg = MIMEMultipart("alternative")
+        msg = MIMEMultipart()
         msg['Subject'] = f"Portfolio Contact Form - Message from {name}"
         msg['From'] = EMAIL_CONFIG['sender_email']
         msg['To'] = EMAIL_CONFIG['recipient_email']
         
         # Get HTML email template
         html_content = get_email_template(name, email, message)
-        mime_html = MIMEText(html_content, "html")
-        msg.attach(mime_html)
+        msg.attach(MIMEText(html_content, 'html'))
         
-        logger.info("Attempting to connect to Gmail SMTP server...")
+        logger.info("Attempting to connect to Gmail SMTP SSL server...")
         
-        # Send email using context manager with detailed error handling
-        with smtplib.SMTP(EMAIL_CONFIG['smtp_server'], EMAIL_CONFIG['smtp_port']) as server:
-            logger.info("Connected to SMTP server successfully")
-            
-            logger.info("Starting TLS encryption...")
-            server.starttls()  # Enable security
-            logger.info("TLS encryption started successfully")
-            
-            logger.info("Attempting to login...")
-            server.login(EMAIL_CONFIG['sender_email'], EMAIL_CONFIG['sender_password'])
-            logger.info("Login successful")
-            
-            logger.info("Sending email...")
-            server.sendmail(EMAIL_CONFIG['sender_email'], EMAIL_CONFIG['recipient_email'], msg.as_string())
-            logger.info("Email sent successfully")
+        # Send email using SSL connection (like your sample)
+        server = smtplib.SMTP_SSL(EMAIL_CONFIG['smtp_server'], EMAIL_CONFIG['smtp_port'])
+        logger.info("Connected to SMTP SSL server successfully")
         
+        logger.info("Attempting to login...")
+        server.login(EMAIL_CONFIG['sender_email'], EMAIL_CONFIG['sender_password'])
+        logger.info("Login successful")
+        
+        logger.info("Sending email...")
+        server.sendmail(EMAIL_CONFIG['sender_email'], EMAIL_CONFIG['recipient_email'], msg.as_string())
+        logger.info("Email sent successfully")
+        
+        server.quit()
         logger.info(f"Email sent successfully from {email}")
         return True
         
@@ -102,7 +98,7 @@ def send_email(name, email, message):
         logger.error("This usually means:")
         logger.error("1. Firewall is blocking the connection")
         logger.error("2. Antivirus software is blocking SMTP")
-        logger.error("3. ISP is blocking port 587")
+        logger.error("3. ISP is blocking port 465")
         logger.error("4. Network connectivity issues")
         return False
     except Exception as e:
