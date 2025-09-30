@@ -134,25 +134,6 @@ def get_email_template(name, email, message):
                         📧 Reply to {name}
                     </a>
                 </div>
-                
-                <!-- Additional Info -->
-                <div class="mt-4">
-                    <div class="alert alert-info" style="border-left: 4px solid #0dcaf0;">
-                        <strong>💡 Quick Actions:</strong>
-                        <ul class="mb-0 mt-2">
-                            <li>Click the reply button above to respond directly</li>
-                            <li>Add <strong>{email}</strong> to your contacts</li>
-                            <li>This message was sent through your portfolio contact form</li>
-                        </ul>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Footer -->
-            <div class="footer">
-                <p class="mb-2"><strong>🌐 Portfolio Contact System</strong></p>
-                <p class="mb-0">This email was automatically generated from your portfolio website contact form.</p>
-                <small>© 2024 Portfolio Backend | Quantum Developer</small>
             </div>
         </div>
     </body>
